@@ -1,0 +1,306 @@
+---
+title: "TloopL2"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(tidyr)
+library(RColorBrewer)
+library(plyr)
+library(dplyr)
+library(tibble)
+```
+
+## Creating the function to remove outliers based on Interquartile range
+```{r}
+removeOut <- function(distribution, bounds=1.5, na.rm = TRUE) {
+ Q <- quantile(distribution, probs=c(.25,.75), na.rm=TRUE) 
+ #finds the 25th and 75th percentile of the distribution, excluding NAs
+ iqr <- IQR(distribution, na.rm=TRUE)
+ #difference between 75th and 25th quartile=interquartile range
+ upperBound <- Q[2]+bounds*iqr
+ #upper bound of the values is 75th quartile + 1.5*(interquartile range) note: that 1.5 can be vaired by changing bound
+ lowerBound <- Q[1]-bounds*iqr
+ #upper bound of the values is 25th quartile - 1.5*(interquartile range)
+ eliminated <- c(distribution < lowerBound | distribution > upperBound)
+ #take out the values that are outside of the established bounds note: that 1.5 can be vaired by changing bound
+ noteliminatedindex <- which(distribution > lowerBound & distribution < upperBound)
+ #index values within the upper and lower bounds
+ noteliminatedvalues <- distribution[noteliminatedindex]
+ return(noteliminatedvalues)
+ #return those values which will be included that are between the upper and lower bounds 
+}
+```
+
+Read in csv.
+Formatting of csv: each column is a different colony, first row is the name of the colony, each column is then filled with the background fluorescence corrected flourescence values (there should be three values per biological replicate, each of which are the technical replicates). Far right column is the condition of the growth, either - or + ligand. For this particular switch, -L=repression and +L=expression. For those colonies that have less raw data values than the controls, the empty cells are filled with an integer that can be removed easily (-2) to be turned into NA when inputted into R. 
+Put NA in place of -2 (which was how NA was denoted in the csv).
+This is for repression and expression, fold induction will not be included because it will be calculated based on the included repression and expression values.
+```{r}
+#read in csv, these values will include colonies below the function cut off which has been defined here as 2.0
+TloopL2all <- read.csv("TloopL2.csv", header=T)
+empty_columns <- sapply(TloopL2all, function(x) all(is.na(x) | x==""))
+TloopL2all <- TloopL2all[,!empty_columns]
+TloopL2all[TloopL2all == -2] <-NA
+FIrows <- which(TloopL2all$COLONIES == "FI")
+
+#remove the switches below the functional cutoff of 2.0
+#find the FI median
+medFI <-lapply(TloopL2all[FIrows[1]:nrow(TloopL2all),2:ncol(TloopL2all)],median, na.rm=TRUE)
+medFI <- c("med", unlist(medFI))
+TloopL2all <- rbind(TloopL2all, medFI)
+TloopL2all <- mutate_at(TloopL2all,vars(-COLONIES),as.numeric)
+TloopL2 <- data.frame(nrow = nrow(TloopL2all)-1)
+#make a new dataframe for those colonies that have FI > 2.0
+colonyNames <- colnames(TloopL2all)
+winnerColonies<- vector()
+countWinners <- 0
+for(ii in 1:ncol(TloopL2all)) {
+  if(TloopL2all[TloopL2all$COLONIES == "med",ii]>=2.0){
+    TloopL2 <- cbind(TloopL2, TloopL2all[1:nrow(TloopL2all)-1,ii])
+    countWinners <- countWinners+1
+    winnerColonies[countWinners] <-colonyNames[ii]
+  }
+}
+TloopL2 <- TloopL2[, 2:ncol(TloopL2)]
+colnames(TloopL2) <- winnerColonies
+
+
+
+#MINUS CNCbl DF
+TloopL2_minus1 <- TloopL2[TloopL2 == "(-)",]
+TloopL2_minus <- TloopL2_minus1[rowSums(is.na(TloopL2_minus1)) !=ncol(TloopL2_minus1),]
+rm(TloopL2_minus1)
+#remove rows that were only NA and delete dataframe that was filled with NA only columns
+#anchor_rep[,40] <- as.numeric(anchor_rep[,40], na.rm=TRUE)
+#one of the columns was being read in as a character so this fixes that one
+
+#PLUS CNCbl DF
+TloopL2_plus1 <- TloopL2[TloopL2 == "(+)",]
+TloopL2_plus <- TloopL2_plus1[rowSums(is.na(TloopL2_plus1)) !=ncol(TloopL2_plus1),]
+rm(TloopL2_plus1)
+#remove rows that were only NA 
+#anchor_exp[,40] <- as.numeric(anchor_exp[,40], na.rm=TRUE)
+#one of the columns was being read in as a character so this fixes that one
+
+#FI DF
+TloopL2_FI1 <- TloopL2[TloopL2 == "FI",]
+#dataframe of just fold induction
+TloopL2_FI <- TloopL2_FI1[rowSums(is.na(TloopL2_FI1)) !=ncol(TloopL2_FI1),]
+rm(TloopL2_FI1)
+#remove rows that were only NA 
+#one of the columns was being read in as a character so this fixes that one
+
+```
+
+###Using function to remove outliers and create a new dataframe in wide form and long form for minus
+```{r}
+
+noOut_TloopL2_minus.list <- apply(TloopL2_minus[,2:ncol(TloopL2_minus)], 2, removeOut, na.rm=TRUE)
+#this used the function made to identify and remove outliers 
+noOut_TloopL2_minus_sideways <- plyr::ldply(noOut_TloopL2_minus.list, rbind)
+#THERE ARE TWO EMPTY ROWS HERE X AND X.1 THAT I WANT TO GET RID OF 
+#took the list created from the applying the removeOut function and made it into a dataframe 
+noOut_TloopL2_minus <- data.frame(t(noOut_TloopL2_minus_sideways[-1]))
+colnames(noOut_TloopL2_minus) <- noOut_TloopL2_minus_sideways[,1]
+#rotate the dataframe created by the function to prepare it for converting to long form 
+TloopL2_minus_noOut_wideform <- cbind(TloopL2_minus[1:nrow(noOut_TloopL2_minus),1], noOut_TloopL2_minus[,1:ncol(noOut_TloopL2_minus)])
+#replaces id column with COLONY column which identified the value as (-) or (+)
+colnames(TloopL2_minus_noOut_wideform)[1] <- "COLONIES"
+#rename the first column 
+long_TloopL2_minus <- gather(TloopL2_minus_noOut_wideform, Colony_Name, Fluorescence, -COLONIES)
+#code for color on graph
+is_env8minus_L2 <- vector()
+# 0=not env8 = control
+#is_env8_L2_evolved <- grep("\\.env8", long_TloopL2_minus[,2])
+#jj=1
+for(ii in 1:nrow(long_TloopL2_minus)) {
+  if(long_TloopL2_minus[ii,2] == "env8") {
+    is_env8minus_L2[ii] <- 8
+  }
+  else{
+    is_env8minus_L2[ii] <- 0
+  }
+}
+
+long_TloopL2_minus <- cbind(long_TloopL2_minus, is_env8minus_L2)
+#make column that identifies colonies as env8 for plotting
+```
+ 
+###Using function to remove outliers and create a new dataframe in wide form and long form for plus
+```{r}
+
+noOut_TloopL2_plus.list <- apply(TloopL2_plus[,2:ncol(TloopL2_plus)], 2, removeOut, na.rm=TRUE)
+#this used the function made to identify and remove outliers 
+noOut_TloopL2_plus_sideways <- plyr::ldply(noOut_TloopL2_plus.list, rbind)
+#THERE ARE TWO EMPTY ROWS HERE X AND X.1 THAT I WANT TO GET RID OF 
+#took the list created from the applying the removeOut function and made it into a dataframe 
+noOut_TloopL2_plus <- data.frame(t(noOut_TloopL2_plus_sideways[-1]))
+colnames(noOut_TloopL2_plus) <- noOut_TloopL2_plus_sideways[,1]
+#rotate the dataframe created by the function to prepare it for converting to long form 
+TloopL2_plus_noOut_wideform <- cbind(TloopL2_plus[1:nrow(noOut_TloopL2_plus),1], noOut_TloopL2_plus[,1:ncol(noOut_TloopL2_plus)])
+#replaces id column with COLONY column which identified the value as (-) or (+)
+colnames(TloopL2_plus_noOut_wideform)[1] <- "COLONIES"
+#rename the first column 
+long_TloopL2_plus <- gather(TloopL2_plus_noOut_wideform, Colony_Name, Fluorescence, -COLONIES)
+#code for color on graph
+is_env8plus_L2 <- vector()
+# 0=not env8 = control
+#is_env8_L2_evolved <- grep("\\.env8", long_TloopL2_minus[,2])
+#jj=1
+for(ii in 1:nrow(long_TloopL2_plus)) {
+  if(long_TloopL2_plus[ii,2] == "env8") {
+    is_env8plus_L2[ii] <- 8
+  }
+  else{
+    is_env8plus_L2[ii] <- 0
+  }
+}
+
+long_TloopL2_plus <- cbind(long_TloopL2_plus, is_env8plus_L2)
+#make column that identifies colonies as env8 for plotting
+```
+
+###Using function to remove outliers and create a new dataframe in wide form and long form for FI
+```{r}
+
+noOut_TloopL2_FI.list <- apply(TloopL2_FI[,2:ncol(TloopL2_FI)], 2, removeOut, na.rm=TRUE)
+#this used the function made to identify and remove outliers 
+noOut_TloopL2_FI_sideways <- plyr::ldply(noOut_TloopL2_FI.list, rbind)
+#THERE ARE TWO EMPTY ROWS HERE X AND X.1 THAT I WANT TO GET RID OF 
+#took the list created from the applying the removeOut function and made it into a dataframe 
+noOut_TloopL2_FI <- data.frame(t(noOut_TloopL2_FI_sideways[-1]))
+colnames(noOut_TloopL2_FI) <- noOut_TloopL2_FI_sideways[,1]
+#rotate the dataframe created by the function to prepare it for converting to long form 
+TloopL2_FI_noOut_wideform <- cbind(TloopL2_FI[1:nrow(noOut_TloopL2_FI),1], noOut_TloopL2_FI[,1:ncol(noOut_TloopL2_FI)])
+#replaces id column with COLONY column which identified the value as (-) or (+)
+colnames(TloopL2_FI_noOut_wideform)[1] <- "COLONIES"
+#rename the first column 
+long_TloopL2_FI <- gather(TloopL2_FI_noOut_wideform, Colony_Name, Fluorescence, -COLONIES)
+#code for color on graph
+is_env8FI_L2 <- vector()
+# 0=not env8 = control
+#is_env8_L2_evolved <- grep("\\.env8", long_TloopL2_minus[,2])
+#jj=1
+for(ii in 1:nrow(long_TloopL2_FI)) {
+  if(long_TloopL2_FI[ii,2] == "env8") {
+    is_env8FI_L2[ii] <- 8
+  }
+  else{
+    is_env8FI_L2[ii] <- 0
+  }
+}
+
+long_TloopL2_FI <- cbind(long_TloopL2_FI, is_env8FI_L2)
+#make column that identifies colonies as env8 for plotting
+```
+
+##ANOVA
+###minus
+```{r, echo=FALSE}
+TloopL2_minus.aov <- aov(Fluorescence ~ Colony_Name, data=long_TloopL2_minus)
+summary(TloopL2_minus.aov)
+colony_comparisons <- TukeyHSD(TloopL2_minus.aov)
+TloopL2_minus_confidence_interval <- as.data.frame(colony_comparisons[["Colony_Name"]])
+TloopL2_minus_confidence_interval <- rownames_to_column(TloopL2_minus_confidence_interval)
+TloopL2_minusvsenv8_confidence_interval <- TloopL2_minus_confidence_interval[grep("env8", TloopL2_minus_confidence_interval[,1]),]
+is_sigL2minus <- vector()
+for(ii in 1:nrow(TloopL2_minusvsenv8_confidence_interval)) {
+  if(TloopL2_minusvsenv8_confidence_interval[ii,5] < 0.001) {
+    is_sigL2minus[ii] <- 3
+  }
+  else if(TloopL2_minusvsenv8_confidence_interval[ii,5] < 0.01) {
+    is_sigL2minus[ii] <- 2
+  }
+  else if(TloopL2_minusvsenv8_confidence_interval[ii,5] < 0.05) {
+    is_sigL2minus[ii] <- 1
+  }
+  else{
+    is_sigL2minus[ii] <- 0
+  }
+}
+TloopL2_minusvsenv8_confidence_interval <- cbind(TloopL2_minusvsenv8_confidence_interval, is_sigL2minus)
+medianL2_minus<- as.data.frame(apply(noOut_TloopL2_minus, 2, median, na.rm=TRUE))
+``` 
+
+###plus
+```{r, echo=FALSE}
+TloopL2_plus.aov <- aov(Fluorescence ~ Colony_Name, data=long_TloopL2_plus)
+summary(TloopL2_plus.aov)
+colony_comparisons <- TukeyHSD(TloopL2_plus.aov)
+TloopL2_plus_confidence_interval <- as.data.frame(colony_comparisons[["Colony_Name"]])
+TloopL2_plus_confidence_interval <- rownames_to_column(TloopL2_plus_confidence_interval)
+TloopL2_plusvsenv8_confidence_interval <- TloopL2_plus_confidence_interval[grep("env8", TloopL2_plus_confidence_interval[,1]),]
+is_sigL2plus <- vector()
+for(ii in 1:nrow(TloopL2_plusvsenv8_confidence_interval)) {
+  if(TloopL2_plusvsenv8_confidence_interval[ii,5] < 0.001) {
+    is_sigL2plus[ii] <- 3
+  }
+  else if(TloopL2_plusvsenv8_confidence_interval[ii,5] < 0.01) {
+    is_sigL2plus[ii] <- 2
+  }
+  else if(TloopL2_plusvsenv8_confidence_interval[ii,5] < 0.05) {
+    is_sigL2plus[ii] <- 1
+  }
+  else{
+    is_sigL2plus[ii] <- 0
+  }
+}
+TloopL2_plusvsenv8_confidence_interval <- cbind(TloopL2_plusvsenv8_confidence_interval, is_sigL2plus)
+medianL2_plus<- as.data.frame(apply(noOut_TloopL2_plus, 2, median, na.rm=TRUE))
+``` 
+
+###plus
+```{r, echo=FALSE}
+TloopL2_FI.aov <- aov(Fluorescence ~ Colony_Name, data=long_TloopL2_FI)
+summary(TloopL2_FI.aov)
+colony_comparisons <- TukeyHSD(TloopL2_FI.aov)
+TloopL2_FI_confidence_interval <- as.data.frame(colony_comparisons[["Colony_Name"]])
+TloopL2_FI_confidence_interval <- rownames_to_column(TloopL2_FI_confidence_interval)
+TloopL2_FIvsenv8_confidence_interval <- TloopL2_FI_confidence_interval[grep("env8", TloopL2_FI_confidence_interval[,1]),]
+is_sigL2FI <- vector()
+for(ii in 1:nrow(TloopL2_FIvsenv8_confidence_interval)) {
+  if(TloopL2_FIvsenv8_confidence_interval[ii,5] < 0.001) {
+    is_sigL2FI[ii] <- 3
+  }
+  else if(TloopL2_FIvsenv8_confidence_interval[ii,5] < 0.01) {
+    is_sigL2FI[ii] <- 2
+  }
+  else if(TloopL2_FIvsenv8_confidence_interval[ii,5] < 0.05) {
+    is_sigL2FI[ii] <- 1
+  }
+  else{
+    is_sigL2FI[ii] <- 0
+  }
+}
+TloopL2_FIvsenv8_confidence_interval <- cbind(TloopL2_FIvsenv8_confidence_interval, is_sigL2FI)
+medianL2_FI<- as.data.frame(apply(noOut_TloopL2_FI, 2, median, na.rm=TRUE))
+``` 
+
+##Plots
+```{r, echo=FALSE}
+ggplot(long_TloopL2_minus, aes(x=reorder(Colony_Name,-Fluorescence, na.rm=TRUE), y=Fluorescence, fill=is_env8minus_L2))+
+    geom_boxplot(alpha=0.8)+
+   labs(title="T Loop L2 Minus CNCbl", x="Colony", y="Fluorescence")+
+   scale_y_log10()+
+    theme_classic()+
+    theme(axis.text.x = element_text(face="bold", angle=90), plot.title = element_text(hjust=0.5, face="bold"), axis.text.y = element_text(face="bold"), axis.title.x = element_text(face = "bold"), legend.position = "none")
+
+ggplot(long_TloopL2_plus, aes(x=reorder(Colony_Name,-Fluorescence, na.rm=TRUE), y=Fluorescence, fill=is_env8plus_L2))+
+    geom_boxplot(alpha=0.8)+
+   labs(title="T Loop L2 Plus CNCbl", x="Colony", y="Fluorescence")+
+   scale_y_log10()+
+    theme_classic()+
+    theme(plot.title = element_text(hjust=0.5, face="bold"), axis.text.y = element_text(face="bold"), axis.title.x = element_text(face = "bold"), axis.title.y = element_text(face = "bold"), legend.position = "none", axis.text.x=element_blank())
+
+ggplot(long_TloopL2_FI, aes(x=reorder(Colony_Name,-Fluorescence, na.rm=TRUE), y=Fluorescence, fill=is_env8FI_L2))+
+    geom_boxplot()+
+   labs(title="T Loop L2 Fold Induction", x="Colony", y="Fold Induction")+
+ #  scale_y_log10()+
+    theme_classic()+
+    theme(axis.text.x = element_text(face="bold", angle=90), plot.title = element_text(hjust=0.5, face="bold"), axis.text.y = element_text(face="bold"), axis.title.x = element_text(face = "bold"), axis.title.y = element_text(face = "bold"), legend.position = "none")
+``` 
