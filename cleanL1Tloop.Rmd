@@ -1,5 +1,5 @@
 ---
-title: "L4Tloop"
+title: "cleanL1Tloop"
 output: html_document
 ---
 ```{r setup, include=FALSE}
@@ -42,32 +42,32 @@ Put NA in place of -2 (which was how NA was denoted in the csv).
 This is for repression and expression, fold induction will not be included because it will be calculated based on the included repression and expression values.
 ```{r}
 #read in csv, these values will include colonies below the function cut off which has been defined here as 2.0
-TloopL4all <- read.csv("TloopL4.csv", header=T)
-empty_columns <- sapply(TloopL4all, function(x) all(is.na(x) | x==""))
-TloopL4all <- TloopL4all[,!empty_columns]
-TloopL4all[TloopL4all == -2] <-NA
-FIrows <- which(TloopL4all$COLONIES == "FI")
+TloopL1all <- read.csv("TloopL1.csv", header=T)
+empty_columns <- sapply(TloopL1all, function(x) all(is.na(x) | x==""))
+TloopL1all <- TloopL1all[,!empty_columns]
+TloopL1all[TloopL1all == -2] <-NA
+FIrows <- which(TloopL1all$COLONIES == "FI")
 
 #MINUS CNCbl DF
-TloopL4_minus1 <- TloopL4all[TloopL4all == "(-)",]
-TloopL4_minus <- TloopL4_minus1[rowSums(is.na(TloopL4_minus1)) !=ncol(TloopL4_minus1),]
-rm(TloopL4_minus1)
+TloopL1_minus1 <- TloopL1all[TloopL1all == "(-)",]
+TloopL1_minus <- TloopL1_minus1[rowSums(is.na(TloopL1_minus1)) !=ncol(TloopL1_minus1),]
+rm(TloopL1_minus1)
 #remove rows that were only NA and delete dataframe that was filled with NA only columns
 #anchor_rep[,40] <- as.numeric(anchor_rep[,40], na.rm=TRUE)
 #one of the columns was being read in as a character so this fixes that one
 
 #PLUS CNCbl DF
-TloopL4_plus1 <- TloopL4all[TloopL4all == "(+)",]
-TloopL4_plus <- TloopL4_plus1[rowSums(is.na(TloopL4_plus1)) !=ncol(TloopL4_plus1),]
-rm(TloopL4_plus1)
+TloopL1_plus1 <- TloopL1all[TloopL1all == "(+)",]
+TloopL1_plus <- TloopL1_plus1[rowSums(is.na(TloopL1_plus1)) !=ncol(TloopL1_plus1),]
+rm(TloopL1_plus1)
 #remove rows that were only NA 
 #one of the columns was being read in as a character so this fixes that one
-#noOut_TloopL4_minus_sideways 
+#noOut_TloopL1_minus_sideways 
 #FI DF
-TloopL4_FI1 <- TloopL4all[TloopL4all == "FI",]
+TloopL1_FI1 <- TloopL1all[TloopL1all == "FI",]
 #dataframe of just fold induction
-TloopL4_FI <- TloopL4_FI1[rowSums(is.na(TloopL4_FI1)) !=ncol(TloopL4_FI1),]
-rm(TloopL4_FI1)
+TloopL1_FI <- TloopL1_FI1[rowSums(is.na(TloopL1_FI1)) !=ncol(TloopL1_FI1),]
+rm(TloopL1_FI1)
 #remove rows that were only NA 
 #one of the columns was being read in as a character so this fixes that one
 
@@ -76,86 +76,86 @@ rm(TloopL4_FI1)
 ###Using function to remove outliers and create a new dataframe in wide form and long form for minus
 ```{r}
 
-noOut_TloopL4_minus.list <- apply(TloopL4_minus[,2:ncol(TloopL4_minus)], 2, removeOut, na.rm=TRUE)
+noOut_TloopL1_minus.list <- apply(TloopL1_minus[,2:ncol(TloopL1_minus)], 2, removeOut, na.rm=TRUE)
 #this used the function made to identify and remove outliers 
-noOut_TloopL4_minus_sideways <- plyr::ldply(noOut_TloopL4_minus.list, rbind)
+noOut_TloopL1_minus_sideways <- plyr::ldply(noOut_TloopL1_minus.list, rbind)
 #took the list created from the applying the removeOut function and made it into a dataframe 
-noOut_TloopL4_minus <- data.frame(t(noOut_TloopL4_minus_sideways[-1]))
-colnames(noOut_TloopL4_minus) <- noOut_TloopL4_minus_sideways[,1]
+noOut_TloopL1_minus <- data.frame(t(noOut_TloopL1_minus_sideways[-1]))
+colnames(noOut_TloopL1_minus) <- noOut_TloopL1_minus_sideways[,1]
 #rotate the dataframe created by the function to prepare it for converting to long form 
-TloopL4_minus_noOut_wideform <- cbind(TloopL4_minus[1:nrow(noOut_TloopL4_minus),1], noOut_TloopL4_minus[,1:ncol(noOut_TloopL4_minus)])
+TloopL1_minus_noOut_wideform <- cbind(TloopL1_minus[1:nrow(noOut_TloopL1_minus),1], noOut_TloopL1_minus[,1:ncol(noOut_TloopL1_minus)])
 #replaces id column with COLONY column which identified the value as (-) or (+)
-colnames(TloopL4_minus_noOut_wideform)[1] <- "COLONIES"
+colnames(TloopL1_minus_noOut_wideform)[1] <- "COLONIES"
 #rename the first column 
-long_TloopL4_minus <- gather(TloopL4_minus_noOut_wideform, Colony_Name, Fluorescence, -COLONIES)
+long_TloopL1_minus <- gather(TloopL1_minus_noOut_wideform, Colony_Name, Fluorescence, -COLONIES)
 ```
 
 ###Using function to remove outliers and create a new dataframe in wide form and long form for plus
 ```{r}
 
-noOut_TloopL4_plus.list <- apply(TloopL4_plus[,2:ncol(TloopL4_plus)], 2, removeOut, na.rm=TRUE)
+noOut_TloopL1_plus.list <- apply(TloopL1_plus[,2:ncol(TloopL1_plus)], 2, removeOut, na.rm=TRUE)
 #this used the function made to identify and remove outliers 
-noOut_TloopL4_plus_sideways <- plyr::ldply(noOut_TloopL4_plus.list, rbind)
+noOut_TloopL1_plus_sideways <- plyr::ldply(noOut_TloopL1_plus.list, rbind)
 #THERE ARE TWO EMPTY ROWS HERE X AND X.1 THAT I WANT TO GET RID OF 
 #took the list created from the applying the removeOut function and made it into a dataframe 
-noOut_TloopL4_plus <- data.frame(t(noOut_TloopL4_plus_sideways[-1]))
-colnames(noOut_TloopL4_plus) <- noOut_TloopL4_plus_sideways[,1]
+noOut_TloopL1_plus <- data.frame(t(noOut_TloopL1_plus_sideways[-1]))
+colnames(noOut_TloopL1_plus) <- noOut_TloopL1_plus_sideways[,1]
 #rotate the dataframe created by the function to prepare it for converting to long form 
-TloopL4_plus_noOut_wideform <- cbind(TloopL4_plus[1:nrow(noOut_TloopL4_plus),1], noOut_TloopL4_plus[,1:ncol(noOut_TloopL4_plus)])
+TloopL1_plus_noOut_wideform <- cbind(TloopL1_plus[1:nrow(noOut_TloopL1_plus),1], noOut_TloopL1_plus[,1:ncol(noOut_TloopL1_plus)])
 #replaces id column with COLONY column which identified the value as (-) or (+)
-colnames(TloopL4_plus_noOut_wideform)[1] <- "COLONIES"
+colnames(TloopL1_plus_noOut_wideform)[1] <- "COLONIES"
 #rename the first column 
-long_TloopL4_plus <- gather(TloopL4_plus_noOut_wideform, Colony_Name, Fluorescence, -COLONIES)
+long_TloopL1_plus <- gather(TloopL1_plus_noOut_wideform, Colony_Name, Fluorescence, -COLONIES)
 ```
 
 ###Using function to remove outliers and create a new dataframe in wide form and long form for FI
 ```{r}
 
-noOut_TloopL4_FI.list <- apply(TloopL4_FI[,2:ncol(TloopL4_FI)], 2, removeOut, na.rm=TRUE)
+noOut_TloopL1_FI.list <- apply(TloopL1_FI[,2:ncol(TloopL1_FI)], 2, removeOut, na.rm=TRUE)
 #this used the function made to identify and remove outliers 
-noOut_TloopL4_FI_sideways <- plyr::ldply(noOut_TloopL4_FI.list, rbind)
+noOut_TloopL1_FI_sideways <- plyr::ldply(noOut_TloopL1_FI.list, rbind)
 #THERE ARE TWO EMPTY ROWS HERE X AND X.1 THAT I WANT TO GET RID OF 
 #took the list created from the applying the removeOut function and made it into a dataframe 
-noOut_TloopL4_FI <- data.frame(t(noOut_TloopL4_FI_sideways[-1]))
-colnames(noOut_TloopL4_FI) <- noOut_TloopL4_FI_sideways[,1]
+noOut_TloopL1_FI <- data.frame(t(noOut_TloopL1_FI_sideways[-1]))
+colnames(noOut_TloopL1_FI) <- noOut_TloopL1_FI_sideways[,1]
 #rotate the dataframe created by the function to prepare it for converting to long form 
-TloopL4_FI_noOut_wideform <- cbind(TloopL4_FI[1:nrow(noOut_TloopL4_FI),1], noOut_TloopL4_FI[,1:ncol(noOut_TloopL4_FI)])
+TloopL1_FI_noOut_wideform <- cbind(TloopL1_FI[1:nrow(noOut_TloopL1_FI),1], noOut_TloopL1_FI[,1:ncol(noOut_TloopL1_FI)])
 #replaces id column with COLONY column which identified the value as (-) or (+)
-colnames(TloopL4_FI_noOut_wideform)[1] <- "COLONIES"
+colnames(TloopL1_FI_noOut_wideform)[1] <- "COLONIES"
 #rename the first column 
-long_TloopL4_FI <- gather(TloopL4_FI_noOut_wideform, Colony_Name, Fluorescence, -COLONIES)
-medianL4_FI<- as.data.frame(apply(noOut_TloopL4_FI, 2, median, na.rm=TRUE))
+long_TloopL1_FI <- gather(TloopL1_FI_noOut_wideform, Colony_Name, Fluorescence, -COLONIES)
+medianL1_FI<- as.data.frame(apply(noOut_TloopL1_FI, 2, median, na.rm=TRUE))
 ```
 
 ##Make DF of medians of each after removal of outliers 
 ```{r}
 #median DFs
-medianL4_FI<- as.data.frame(apply(noOut_TloopL4_FI, 2, median, na.rm=TRUE))
-medianL4_minus<- as.data.frame(apply(noOut_TloopL4_minus, 2, median, na.rm=TRUE))
-medianL4_plus<- as.data.frame(apply(noOut_TloopL4_plus, 2, median, na.rm=TRUE))
+medianL1_FI<- as.data.frame(apply(noOut_TloopL1_FI, 2, median, na.rm=TRUE))
+medianL1_minus<- as.data.frame(apply(noOut_TloopL1_minus, 2, median, na.rm=TRUE))
+medianL1_plus<- as.data.frame(apply(noOut_TloopL1_plus, 2, median, na.rm=TRUE))
 #standard error DFs for minus and plus
-SE_L4_minus <- std.error(noOut_TloopL4_minus)
-SE_L4_plus <- std.error(noOut_TloopL4_plus)
+SE_L1_minus <- std.error(noOut_TloopL1_minus)
+SE_L1_plus <- std.error(noOut_TloopL1_plus)
 #create one data frame that has medians and standard errors
-L4_all_summary_table <- cbind.data.frame(medianL4_minus, SE_L4_minus, medianL4_plus, SE_L4_plus, medianL4_FI)
+L1_all_summary_table <- cbind.data.frame(medianL1_minus, SE_L1_minus, medianL1_plus, SE_L1_plus, medianL1_FI)
 #the measurements should have 2 sig figs and the standards errors should have 1 sig fig
 odd_cols <- c(1,3,5)
 even_cols <- c(2,4)
-L4_all_summary_table[,odd_cols] <- signif(L4_all_summary_table[,odd_cols],2)
-L4_all_summary_table[,even_cols] <- signif(L4_all_summary_table[,even_cols],1)
+L1_all_summary_table[,odd_cols] <- signif(L1_all_summary_table[,odd_cols],2)
+L1_all_summary_table[,even_cols] <- signif(L1_all_summary_table[,even_cols],1)
 #rename column names
-colnames(L4_all_summary_table) <- c("+CNCbl", "+CNCbl_SE","-CNCbl", "-CNCbl_SE", "FI")
+colnames(L1_all_summary_table) <- c("+CNCbl", "+CNCbl_SE","-CNCbl", "-CNCbl_SE", "FI")
 #write csv
-write.csv(L4_all_summary_table,"~/Downloads/Tloop_CNCbl/output_summary_files/L4_all_summary_file.csv", row.names = TRUE)
+write.csv(L1_all_summary_table,"~/Downloads/Tloop_CNCbl/output_summary_files/L1_all_summary_file.csv", row.names = TRUE)
 
 #remove the switches below the functional cutoff of 2.0
 #find the FI median
-L4_summary_table <- subset(L4_all_summary_table, FI>2.0)
+L1_summary_table <- subset(L1_all_summary_table, FI>2.0)
 #write csv
-write.csv(L4_summary_table,"~/Downloads/Tloop_CNCbl/output_summary_files/L4_summary_file.csv", row.names = TRUE)
+write.csv(L1_summary_table,"~/Downloads/Tloop_CNCbl/output_summary_files/L1_summary_file.csv", row.names = TRUE)
 #write excel
-write.xlsx(L4_summary_table, '~/Downloads/Tloop_CNCbl/output_summary_files/L4_summary_file.xlsx', rowNames = TRUE)
-write.xlsx(L4_all_summary_table, '~/Downloads/Tloop_CNCbl/output_summary_files/L4__all_summary_file.xlsx', rowNames = TRUE)
+write.xlsx(L1_summary_table, '~/Downloads/Tloop_CNCbl/output_summary_files/L1_summary_file.xlsx', rowNames = TRUE)
+write.xlsx(L1_all_summary_table, '~/Downloads/Tloop_CNCbl/output_summary_files/L1__all_summary_file.xlsx', rowNames = TRUE)
 ```
 
 

@@ -1,5 +1,5 @@
 ---
-title: "TloopL1"
+title: "TloopL1_badones"
 output: html_document
 editor_options: 
   chunk_output_type: console
@@ -43,7 +43,7 @@ Put NA in place of -2 (which was how NA was denoted in the csv).
 This is for repression and expression, fold induction will not be included because it will be calculated based on the included repression and expression values.
 ```{r}
 #read in csv, these values will include colonies below the function cut off which has been defined here as 2.0
-TloopL1all <- read.csv("TloopL1.csv", header=T)
+TloopL1all <- read.csv("L1Tloop.csv", header=T)
 empty_columns <- sapply(TloopL1all, function(x) all(is.na(x) | x==""))
 TloopL1all <- TloopL1all[,!empty_columns]
 TloopL1all[TloopL1all == -2] <-NA
@@ -61,7 +61,7 @@ colonyNames <- colnames(TloopL1all)
 winnerColonies<- vector()
 countWinners <- 0
 for(ii in 1:ncol(TloopL1all)) {
-  if(TloopL1all[TloopL1all$COLONIES == "med",ii]>=2.0){
+  if(TloopL1all[TloopL1all$COLONIES == "med",ii]<2.0){
     TloopL1 <- cbind(TloopL1, TloopL1all[1:nrow(TloopL1all)-1,ii])
     countWinners <- countWinners+1
     winnerColonies[countWinners] <-colonyNames[ii]

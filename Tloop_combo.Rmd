@@ -1,0 +1,371 @@
+---
+title: "Tloop combo"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(tidyr)
+library(RColorBrewer)
+library(plyr)
+library(dplyr)
+library(tibble)
+library(ggsignif)
+```
+
+## Creating the function to remove outliers based on Interquartile range
+```{r}
+removeOut <- function(distribution, bounds=1.5, na.rm = TRUE) {
+ Q <- quantile(distribution, probs=c(.25,.75), na.rm=TRUE) 
+ #finds the 25th and 75th percentile of the distribution, excluding NAs
+ iqr <- IQR(distribution, na.rm=TRUE)
+ #difference between 75th and 25th quartile=interquartile range
+ upperBound <- Q[2]+bounds*iqr
+ #upper bound of the values is 75th quartile + 1.5*(interquartile range) note: that 1.5 can be vaired by changing bound
+ lowerBound <- Q[1]-bounds*iqr
+ #upper bound of the values is 25th quartile - 1.5*(interquartile range)
+ eliminated <- c(distribution < lowerBound | distribution > upperBound)
+ #take out the values that are outside of the established bounds note: that 1.5 can be vaired by changing bound
+ noteliminatedindex <- which(distribution > lowerBound & distribution < upperBound)
+ #index values within the upper and lower bounds
+ noteliminatedvalues <- distribution[noteliminatedindex]
+ return(noteliminatedvalues)
+ #return those values which will be included that are between the upper and lower bounds 
+}
+```
+
+Read in csv.
+Formatting of csv: each column is a different colony, first row is the name of the colony, each column is then filled with the background fluorescence corrected flourescence values (there should be three values per biological replicate, each of which are the technical replicates). Far right column is the condition of the growth, either - or + ligand. For this particular switch, -L=repression and +L=expression. For those colonies that have less raw data values than the controls, the empty cells are filled with an integer that can be removed easily (-2) to be turned into NA when inputted into R. 
+Put NA in place of -2 (which was how NA was denoted in the csv).
+This is for repression and expression, fold induction will not be included because it will be calculated based on the included repression and expression values.
+```{r}
+#read in csv, these values will include colonies below the function cut off which has been defined here as 2.0
+Tloopcomboall <- read.csv("Tloop_Combo_data.csv", header=T)
+empty_columns <- sapply(Tloopcomboall, function(x) all(is.na(x) | x==""))
+Tloopcomboall <- Tloopcomboall[,!empty_columns]
+Tloopcomboall[Tloopcomboall == -2] <-NA
+FIrows <- which(Tloopcomboall$COLONIES == "FI")
+
+#remove the switches below the functional cutoff of 2.0
+#find the FI median
+medFI <-lapply(Tloopcomboall[FIrows[1]:nrow(Tloopcomboall),2:ncol(Tloopcomboall)],median, na.rm=TRUE)
+medFI <- c("med", unlist(medFI))
+Tloopcomboall <- rbind(Tloopcomboall, medFI)
+Tloopcomboall <- mutate_at(Tloopcomboall,vars(-COLONIES),as.numeric)
+Tloopcombo <- data.frame(nrow = nrow(Tloopcomboall)-1)
+#make a new dataframe for those colonies that have FI > 2.0
+colonyNames <- colnames(Tloopcomboall)
+winnerColonies<- vector()
+countWinners <- 0
+for(ii in 1:ncol(Tloopcomboall)) {
+  if(Tloopcomboall[Tloopcomboall$COLONIES == "med",ii]>=2.0){
+    Tloopcombo <- cbind(Tloopcombo, Tloopcomboall[1:nrow(Tloopcomboall)-1,ii])
+    countWinners <- countWinners+1
+    winnerColonies[countWinners] <-colonyNames[ii]
+  }
+}
+Tloopcombo <- Tloopcombo[, 2:ncol(Tloopcombo)]
+colnames(Tloopcombo) <- winnerColonies
+
+
+
+#MINUS CNCbl DF
+Tloopcombo_minus1 <- Tloopcombo[Tloopcombo == "(-)",]
+Tloopcombo_minus <- Tloopcombo_minus1[rowSums(is.na(Tloopcombo_minus1)) !=ncol(Tloopcombo_minus1),]
+rm(Tloopcombo_minus1)
+#remove rows that were only NA and delete dataframe that was filled with NA only columns
+#anchor_rep[,40] <- as.numeric(anchor_rep[,40], na.rm=TRUE)
+#one of the columns was being read in as a character so this fixes that one
+
+#PLUS CNCbl DF
+Tloopcombo_plus1 <- Tloopcombo[Tloopcombo == "(+)",]
+Tloopcombo_plus <- Tloopcombo_plus1[rowSums(is.na(Tloopcombo_plus1)) !=ncol(Tloopcombo_plus1),]
+rm(Tloopcombo_plus1)
+#remove rows that were only NA 
+#one of the columns was being read in as a character so this fixes that one
+#noOut_Tloopcombo_minus_sideways 
+#FI DF
+Tloopcombo_FI1 <- Tloopcombo[Tloopcombo == "FI",]
+#dataframe of just fold induction
+Tloopcombo_FI <- Tloopcombo_FI1[rowSums(is.na(Tloopcombo_FI1)) !=ncol(Tloopcombo_FI1),]
+rm(Tloopcombo_FI1)
+#remove rows that were only NA 
+#one of the columns was being read in as a character so this fixes that one
+
+```
+
+###Using function to remove outliers and create a new dataframe in wide form and long form for minus
+```{r}
+
+noOut_Tloopcombo_minus.list <- apply(Tloopcombo_minus[,2:ncol(Tloopcombo_minus)], 2, removeOut, na.rm=TRUE)
+#this used the function made to identify and remove outliers 
+noOut_Tloopcombo_minus.list <- data.frame(noOut_Tloopcombo_minus.list)
+noOut_Tloopcombo_minus_sideways <- plyr::ldply(noOut_Tloopcombo_minus.list, rbind, .id = "column_label")
+
+#THERE ARE TWO EMPTY ROWS HERE X AND X.1 THAT I WANT TO GET RID OF 
+#took the list created from the applying the removeOut function and made it into a dataframe 
+noOut_Tloopcombo_minus <- data.frame(t(noOut_Tloopcombo_minus_sideways[-1]))
+colnames(noOut_Tloopcombo_minus) <- noOut_Tloopcombo_minus_sideways[,1]
+#rotate the dataframe created by the function to prepare it for converting to long form 
+Tloopcombo_minus_noOut_wideform <- cbind(Tloopcombo_minus[1:nrow(noOut_Tloopcombo_minus),1], noOut_Tloopcombo_minus[,1:ncol(noOut_Tloopcombo_minus)])
+#replaces id column with COLONY column which identified the value as (-) or (+)
+colnames(Tloopcombo_minus_noOut_wideform)[1] <- "COLONIES"
+#rename the first column 
+long_Tloopcombo_minus <- gather(Tloopcombo_minus_noOut_wideform, Colony_Name, Fluorescence, -COLONIES)
+```
+
+```{r}
+#code for color on graph
+is_env8minus_combo <- vector()
+# 0=not env8 = control
+#is_env8_combo_evolved <- grep("\\.env8", long_Tloopcombo_minus[,2])
+#jj=1
+for(ii in 1:nrow(long_Tloopcombo_minus)) {
+  if(long_Tloopcombo_minus[ii,2] == "ENV8") {
+    is_env8minus_combo[ii] <- 8
+  }
+  else{
+    is_env8minus_combo[ii] <- 0
+  }
+}
+
+long_Tloopcombo_minus <- cbind(long_Tloopcombo_minus, is_env8minus_combo)
+#make column that identifies colonies as env8 for plotting
+```
+
+###Using function to remove outliers and create a new dataframe in wide form and long form for plus
+```{r}
+
+noOut_Tloopcombo_plus.list <- apply(Tloopcombo_plus[,2:ncol(Tloopcombo_plus)], 2, removeOut, na.rm=TRUE)
+#this used the function made to identify and remove outliers 
+noOut_Tloopcombo_plus.list <- data.frame(noOut_Tloopcombo_plus.list)
+noOut_Tloopcombo_plus_sideways <- plyr::ldply(noOut_Tloopcombo_plus.list, rbind)
+#THERE ARE TWO EMPTY ROWS HERE X AND X.1 THAT I WANT TO GET RID OF 
+#took the list created from the applying the removeOut function and made it into a dataframe 
+noOut_Tloopcombo_plus <- data.frame(t(noOut_Tloopcombo_plus_sideways[-1]))
+colnames(noOut_Tloopcombo_plus) <- noOut_Tloopcombo_plus_sideways[,1]
+#rotate the dataframe created by the function to prepare it for converting to long form 
+Tloopcombo_plus_noOut_wideform <- cbind(Tloopcombo_plus[1:nrow(noOut_Tloopcombo_plus),1], noOut_Tloopcombo_plus[,1:ncol(noOut_Tloopcombo_plus)])
+#replaces id column with COLONY column which identified the value as (-) or (+)
+colnames(Tloopcombo_plus_noOut_wideform)[1] <- "COLONIES"
+#rename the first column 
+long_Tloopcombo_plus <- gather(Tloopcombo_plus_noOut_wideform, Colony_Name, Fluorescence, -COLONIES)
+#code for color on graph
+is_env8plus_combo <- vector()
+# 0=not env8 = control
+#is_env8_combo_evolved <- grep("\\.env8", long_Tloopcombo_minus[,2])
+#jj=1
+for(ii in 1:nrow(long_Tloopcombo_plus)) {
+  if(long_Tloopcombo_plus[ii,2] == "env8") {
+    is_env8plus_combo[ii] <- 8
+  }
+  else{
+    is_env8plus_combo[ii] <- 0
+  }
+}
+
+long_Tloopcombo_plus <- cbind(long_Tloopcombo_plus, is_env8plus_combo)
+#make column that identifies colonies as env8 for plotting
+```
+
+###Using function to remove outliers and create a new dataframe in wide form and long form for FI
+```{r}
+
+noOut_Tloopcombo_FI.list <- apply(Tloopcombo_FI[,2:ncol(Tloopcombo_FI)], 2, removeOut, na.rm=TRUE)
+#this used the function made to identify and remove outliers 
+#noOut_Tloopcombo_FI.list <- data.frame(noOut_Tloopcombo_FI.list)
+noOut_Tloopcombo_FI_sideways <- plyr::ldply(noOut_Tloopcombo_FI.list, rbind)
+#THERE ARE TWO EMPTY ROWS HERE X AND X.1 THAT I WANT TO GET RID OF 
+#took the list created from the applying the removeOut function and made it into a dataframe 
+noOut_Tloopcombo_FI <- data.frame(t(noOut_Tloopcombo_FI_sideways[-1]))
+colnames(noOut_Tloopcombo_FI) <- noOut_Tloopcombo_FI_sideways[,1]
+#rotate the dataframe created by the function to prepare it for converting to long form 
+Tloopcombo_FI_noOut_wideform <- cbind(Tloopcombo_FI[1:nrow(noOut_Tloopcombo_FI),1], noOut_Tloopcombo_FI[,1:ncol(noOut_Tloopcombo_FI)])
+#replaces id column with COLONY column which identified the value as (-) or (+)
+colnames(Tloopcombo_FI_noOut_wideform)[1] <- "COLONIES"
+#rename the first column 
+long_Tloopcombo_FI <- gather(Tloopcombo_FI_noOut_wideform, Colony_Name, Fluorescence, -COLONIES)
+#code for color on graph
+is_env8FI_combo <- vector()
+# 0=not env8 = control
+#is_env8_combo_evolved <- grep("\\.env8", long_Tloopcombo_minus[,2])
+#jj=1
+for(ii in 1:nrow(long_Tloopcombo_FI)) {
+  if(long_Tloopcombo_FI[ii,2] == "env8") {
+    is_env8FI_combo[ii] <- 8
+  }
+  else{
+    is_env8FI_combo[ii] <- 0
+  }
+}
+
+long_Tloopcombo_FI <- cbind(long_Tloopcombo_FI, is_env8FI_combo)
+finalmedFI <-lapply(noOut_Tloopcombo_FI[1:nrow(noOut_Tloopcombo_FI),1:ncol(noOut_Tloopcombo_FI)],median, na.rm=TRUE)
+#make column that identifies colonies as env8 for plotting
+```
+
+##ANOVA
+###minus
+```{r, echo=FALSE}
+Tloopcombo_minus.aov <- aov(Fluorescence ~ Colony_Name, data=long_Tloopcombo_minus)
+summary(Tloopcombo_minus.aov)
+colony_comparisons <- TukeyHSD(Tloopcombo_minus.aov)
+Tloopcombo_minus_confidence_interval <- as.data.frame(colony_comparisons[["Colony_Name"]])
+Tloopcombo_minus_confidence_interval <- rownames_to_column(Tloopcombo_minus_confidence_interval)
+Tloopcombo_minusvsenv8_confidence_interval <- Tloopcombo_minus_confidence_interval[grep("ENV8", Tloopcombo_minus_confidence_interval[,1]),]
+is_sigcombominus <- vector()
+for(ii in 1:nrow(Tloopcombo_minusvsenv8_confidence_interval)) {
+  if(Tloopcombo_minusvsenv8_confidence_interval[ii,5] < 0.001) {
+    is_sigcombominus[ii] <- 3
+  }
+  else if(Tloopcombo_minusvsenv8_confidence_interval[ii,5] < 0.01) {
+    is_sigcombominus[ii] <- 2
+  }
+  else if(Tloopcombo_minusvsenv8_confidence_interval[ii,5] < 0.05) {
+    is_sigcombominus[ii] <- 1
+  }
+  else{
+    is_sigcombominus[ii] <- 0
+  }
+}
+Tloopcombo_minusvsenv8_confidence_interval <- cbind(Tloopcombo_minusvsenv8_confidence_interval, is_sigcombominus)
+mediancombo_minus<- as.data.frame(apply(noOut_Tloopcombo_minus, 2, median, na.rm=TRUE))
+SEcombo_plus<- as.data.frame(apply(noOut_Tloopcombo_plus, 2, mean_se))
+
+``` 
+
+###plus
+```{r, echo=FALSE}
+Tloopcombo_plus.aov <- aov(Fluorescence ~ Colony_Name, data=long_Tloopcombo_plus)
+summary(Tloopcombo_plus.aov)
+colony_comparisons <- TukeyHSD(Tloopcombo_plus.aov)
+Tloopcombo_plus_confidence_interval <- as.data.frame(colony_comparisons[["Colony_Name"]])
+Tloopcombo_plus_confidence_interval <- rownames_to_column(Tloopcombo_plus_confidence_interval)
+Tloopcombo_plusvsenv8_confidence_interval <- Tloopcombo_plus_confidence_interval[grep("ENV8", Tloopcombo_plus_confidence_interval[,1]),]
+is_sigcomboplus <- vector()
+for(ii in 1:nrow(Tloopcombo_plusvsenv8_confidence_interval)) {
+  if(Tloopcombo_plusvsenv8_confidence_interval[ii,5] < 0.001) {
+    is_sigcomboplus[ii] <- 3
+  }
+  else if(Tloopcombo_plusvsenv8_confidence_interval[ii,5] < 0.01) {
+    is_sigcomboplus[ii] <- 2
+  }
+  else if(Tloopcombo_plusvsenv8_confidence_interval[ii,5] < 0.05) {
+    is_sigcomboplus[ii] <- 1
+  }
+  else{
+    is_sigcomboplus[ii] <- 0
+  }
+}
+Tloopcombo_plusvsenv8_confidence_interval <- cbind(Tloopcombo_plusvsenv8_confidence_interval, is_sigcomboplus)
+mediancombo_plus<- as.data.frame(apply(noOut_Tloopcombo_plus, 2, median, na.rm=TRUE))
+SEcombo_minus<- as.data.frame(apply(noOut_Tloopcombo_minus, 2, mean_se))
+
+``` 
+
+###plus
+```{r, echo=FALSE}
+Tloopcombo_FI.aov <- aov(Fluorescence ~ Colony_Name, data=long_Tloopcombo_FI)
+summary(Tloopcombo_FI.aov)
+colony_comparisons <- TukeyHSD(Tloopcombo_FI.aov)
+Tloopcombo_FI_confidence_interval <- as.data.frame(colony_comparisons[["Colony_Name"]])
+Tloopcombo_FI_confidence_interval <- rownames_to_column(Tloopcombo_FI_confidence_interval)
+Tloopcombo_FIvsenv8_confidence_interval <- Tloopcombo_FI_confidence_interval[grep("ENV8", Tloopcombo_FI_confidence_interval[,1]),]
+is_sigcomboFI <- vector()
+for(ii in 1:nrow(Tloopcombo_FIvsenv8_confidence_interval)) {
+  if(Tloopcombo_FIvsenv8_confidence_interval[ii,5] < 0.001) {
+    is_sigcomboFI[ii] <- 3
+  }
+  else if(Tloopcombo_FIvsenv8_confidence_interval[ii,5] < 0.01) {
+    is_sigcomboFI[ii] <- 2
+  }
+  else if(Tloopcombo_FIvsenv8_confidence_interval[ii,5] < 0.05) {
+    is_sigcomboFI[ii] <- 1
+  }
+  else{
+    is_sigcomboFI[ii] <- 0
+  }
+}
+Tloopcombo_FIvsenv8_confidence_interval <- cbind(Tloopcombo_FIvsenv8_confidence_interval, is_sigcomboFI)
+mediancombo_FI<- as.data.frame(apply(noOut_Tloopcombo_FI, 2, median, na.rm=TRUE))
+``` 
+
+```{r}
+#long form df for minus env8 with a column that has the sig as a factor (0,1,2,3) based on Tukey test
+#!!!!!!!!!!!!!!!!!
+Tloopcombo_minusvsenv8_confidence_interval <- Tloopcombo_minusvsenv8_confidence_interval[order(Tloopcombo_FIvsenv8_confidence_interval$rowname),]
+Tloopcombo_minus_noOut_wideform <- Tloopcombo_minus_noOut_wideform[,order(colnames(Tloopcombo_minus_noOut_wideform))]
+#wideform_df <-wideform_df[,order(colnames(wideform_df))]
+signifVec <- c("Significance Level", 0, Tloopcombo_minusvsenv8_confidence_interval$is_sigcombominus)
+Tloopcombo_minus_noOut_wideform <- rbind(Tloopcombo_minus_noOut_wideform, signifVec)
+
+test_long_Tloopcombo_minus <- Tloopcombo_minus_noOut_wideform %>%
+  pivot_longer(cols = -COLONIES) %>%
+  pivot_wider(names_from = COLONIES) %>%
+  unnest()
+#ignore errors it's fine I promise
+#!!!!!!!!!!!!!!!!!
+
+# write csvs 
+# write.csv(mediancombo_minus,"~/Downloads/Tloop_CNCbl/mediancombo_minus.csv", row.names = FALSE)
+# write.csv(mediancombo_plus,"~/Downloads/Tloop_CNCbl/mediancombo_plus.csv", row.names = FALSE)
+# write.csv(mediancombo_FI,"~/Downloads/Tloop_CNCbl/mediancombo_FI.csv", row.names = FALSE)
+```
+
+
+##Plots
+```{r, echo=FALSE}
+ggplot(long_Tloopcombo_minus, aes(x=reorder(Colony_Name,-Fluorescence, na.rm=TRUE), y=Fluorescence, fill=is_env8minus_combo))+
+    geom_boxplot(alpha=0.8)+
+   labs(title="T Loop combo Minus CNCbl", x="Colony", y="Fluorescence")+
+   scale_y_log10()+
+    theme_classic()+
+    theme(axis.text.x = element_text(face="bold", angle=90), plot.title = element_text(hjust=0.5, face="bold"), axis.text.y = element_text(face="bold"), axis.title.x = element_text(face = "bold"), legend.position = "none")
+
+ggplot(long_Tloopcombo_plus, aes(x=reorder(Colony_Name,-Fluorescence, na.rm=TRUE), y=Fluorescence, fill=is_env8plus_combo))+
+    geom_boxplot(alpha=0.8)+
+   labs(title="T Loop combo Plus CNCbl", x="Colony", y="Fluorescence")+
+   scale_y_log10()+
+    theme_classic()+
+    theme(plot.title = element_text(hjust=0.5, face="bold"), axis.text.y = element_text(face="bold"), axis.title.x = element_text(face = "bold"), axis.title.y = element_text(face = "bold"), legend.position = "none", axis.text.x=element_blank())
+
+ggplot(long_Tloopcombo_FI, aes(x=reorder(Colony_Name,-Fluorescence, na.rm=TRUE), y=Fluorescence, fill=is_env8FI_combo))+
+    geom_boxplot()+
+   labs(title="T Loop combo Fold Induction", x="Colony", y="Fold Induction")+
+ #  scale_y_log10()+
+    theme_classic()+
+    theme(axis.text.x = element_text(face="bold", angle=90), plot.title = element_text(hjust=0.5, face="bold"), axis.text.y = element_text(face="bold"), axis.title.x = element_text(face = "bold"), axis.title.y = element_text(face = "bold"), legend.position = "none")
+``` 
+
+```{r, echo=FALSE}
+#make a long form df that has the fluor valeus for (-) and has the significance level coded as a factor (0 1 2 3)
+test_long_Tloopcombo_minus$`(-)` <- as.numeric(test_long_Tloopcombo_minus$`(-)`)
+test_long_Tloopcombo_minus$`Significance Level` <- as.numeric(test_long_Tloopcombo_minus$`Significance Level`)
+test_long_Tloopcombo_minus <- cbind(test_long_Tloopcombo_minus, rep(1e+05, nrow(test_long_Tloopcombo_minus)))
+test_long_Tloopcombo_minus <- as.data.frame(test_long_Tloopcombo_minus)
+
+test_long_Tloopcombo_minus <- test_long_Tloopcombo_minus %>%
+  group_by(name) %>%
+  mutate(med = mean(`(-)`, na.rm = T))
+
+test_long_Tloopcombo_minus <- test_long_Tloopcombo_minus %>%
+  group_by(name) %>%
+  arrange(-med, name, na.rm =T)
+
+ggplot(test_long_Tloopcombo_minus, aes(x=reorder(test_long_Tloopcombo_minus[,1], -test_long_Tloopcombo_minus[,2]), y=test_long_Tloopcombo_minus[,2]), fill = test_long_Tloopcombo_minus[,3])+
+    geom_boxplot(alpha=0.8)+
+   labs(title="T Loop combo Minus CNCbl", x="Colony", y="Fluorescence")+
+   scale_y_log10()+
+    theme_classic()+
+    geom_text(aes(label = test_long_Tloopcombo_minus$`Significance Level`), vjust=0) +
+    theme(axis.text.x = element_text(face="bold", angle=90), plot.title = element_text(hjust=0.5, face="bold"), axis.text.y = element_text(face="bold"), axis.title.x = element_text(face = "bold"), legend.position = "none")
+
+ggplot(long_Tloopcombo_minus, aes(x=reorder(Colony_Name,-Fluorescence, na.rm=TRUE), y=Fluorescence, fill=is_env8minus_combo))+
+    geom_boxplot(alpha=0.8)+
+   labs(title="T Loop combo Minus CNCbl", x="Colony", y="Fluorescence")+
+   scale_y_log10()+
+    theme_classic()+
+    geom_text(aes(label = test_long_Tloopcombo_minus$`Significance Level`,x= test_long_Tloopcombo_minus$name, y = test_long_Tloopcombo_minus$med), vjust=0, nudge_y = 0.4 ) +
+    theme(axis.text.x = element_text(face="bold", angle=90), plot.title = element_text(hjust=0.5, face="bold"), axis.text.y = element_text(face="bold"), axis.title.x = element_text(face = "bold"), legend.position = "none")
+```

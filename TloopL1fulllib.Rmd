@@ -1,8 +1,6 @@
 ---
-title: "TloopL1"
+title: "TloopL1fulllib"
 output: html_document
-editor_options: 
-  chunk_output_type: console
 ---
 
 ```{r setup, include=FALSE}
@@ -43,7 +41,7 @@ Put NA in place of -2 (which was how NA was denoted in the csv).
 This is for repression and expression, fold induction will not be included because it will be calculated based on the included repression and expression values.
 ```{r}
 #read in csv, these values will include colonies below the function cut off which has been defined here as 2.0
-TloopL1all <- read.csv("TloopL1.csv", header=T)
+TloopL1all <- read.csv("L1Tloop.csv", header=T)
 empty_columns <- sapply(TloopL1all, function(x) all(is.na(x) | x==""))
 TloopL1all <- TloopL1all[,!empty_columns]
 TloopL1all[TloopL1all == -2] <-NA
@@ -57,23 +55,23 @@ TloopL1all <- rbind(TloopL1all, medFI)
 TloopL1all <- mutate_at(TloopL1all,vars(-COLONIES),as.numeric)
 TloopL1 <- data.frame(nrow = nrow(TloopL1all)-1)
 #make a new dataframe for those colonies that have FI > 2.0
-colonyNames <- colnames(TloopL1all)
-winnerColonies<- vector()
-countWinners <- 0
-for(ii in 1:ncol(TloopL1all)) {
-  if(TloopL1all[TloopL1all$COLONIES == "med",ii]>=2.0){
-    TloopL1 <- cbind(TloopL1, TloopL1all[1:nrow(TloopL1all)-1,ii])
-    countWinners <- countWinners+1
-    winnerColonies[countWinners] <-colonyNames[ii]
-  }
-}
-TloopL1 <- TloopL1[, 2:ncol(TloopL1)]
-colnames(TloopL1) <- winnerColonies
+#colonyNames <- colnames(TloopL1all)
+#winnerColonies<- vector()
+#countWinners <- 0
+#for(ii in 1:ncol(TloopL1all)) {
+#  if(TloopL1all[TloopL1all$COLONIES == "med",ii]>=2.0){
+#    TloopL1 <- cbind(TloopL1, TloopL1all[1:nrow(TloopL1all)-1,ii])
+#    countWinners <- countWinners+1
+#    winnerColonies[countWinners] <-colonyNames[ii]
+#  }
+#}
+#TloopL1 <- TloopL1[, 2:ncol(TloopL1)]
+#colnames(TloopL1) <- winnerColonies
 
 
 
 #MINUS CNCbl DF
-TloopL1_minus1 <- TloopL1[TloopL1 == "(-)",]
+TloopL1_minus1 <- TloopL1all[TloopL1all == "(-)",]
 TloopL1_minus <- TloopL1_minus1[rowSums(is.na(TloopL1_minus1)) !=ncol(TloopL1_minus1),]
 rm(TloopL1_minus1)
 #remove rows that were only NA and delete dataframe that was filled with NA only columns
@@ -81,14 +79,14 @@ rm(TloopL1_minus1)
 #one of the columns was being read in as a character so this fixes that one
 
 #PLUS CNCbl DF
-TloopL1_plus1 <- TloopL1[TloopL1 == "(+)",]
+TloopL1_plus1 <- TloopL1all[TloopL1all == "(+)",]
 TloopL1_plus <- TloopL1_plus1[rowSums(is.na(TloopL1_plus1)) !=ncol(TloopL1_plus1),]
 rm(TloopL1_plus1)
 #remove rows that were only NA 
 #one of the columns was being read in as a character so this fixes that one
 #noOut_TloopL1_minus_sideways 
 #FI DF
-TloopL1_FI1 <- TloopL1[TloopL1 == "FI",]
+TloopL1_FI1 <- TloopL1all[TloopL1all == "FI",]
 #dataframe of just fold induction
 TloopL1_FI <- TloopL1_FI1[rowSums(is.na(TloopL1_FI1)) !=ncol(TloopL1_FI1),]
 rm(TloopL1_FI1)
