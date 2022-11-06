@@ -144,7 +144,7 @@ even_cols <- c(2,4)
 L5_all_summary_table[,odd_cols] <- signif(L5_all_summary_table[,odd_cols],2)
 L5_all_summary_table[,even_cols] <- signif(L5_all_summary_table[,even_cols],1)
 #rename column names
-colnames(L5_all_summary_table) <- c("+CNCbl", "+CNCbl_SE","-CNCbl", "-CNCbl_SE", "FI")
+colnames(L5_all_summary_table) <- c("-CNCbl", "-CNCbl_SE","+CNCbl", "+CNCbl_SE", "FI")
 #write csv
 write.csv(L5_all_summary_table,"~/Downloads/Tloop_CNCbl/output_summary_files/L5_all_summary_file.csv", row.names = TRUE)
 
